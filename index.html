@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manajemen Tugas Harian</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; 
+        }
+        .task-item {
+            transition: all 0.2s ease-in-out;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Custom styling untuk input date agar lebih elegan di header */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="antialiased text-gray-800 min-h-screen flex items-center justify-center p-4">
+
+    <main class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh] relative">
+        
+        <!-- Header dengan Navigasi Tanggal dan Tombol Laporan -->
+        <header class="bg-blue-600 text-white p-6 pb-8">
+            <div class="flex justify-between items-start mb-2">
+                <h1 class="text-2xl font-bold tracking-tight mb-1">Daftar Tugas</h1>
+                <button id="btn-open-report" class="bg-blue-500 hover:bg-blue-700 transition-colors p-2 rounded-lg text-sm flex items-center gap-1 shadow-sm">
+                    <i class="ph ph-export text-lg"></i>
+                    <span class="font-medium">Laporan</span>
+                </button>
+            </div>
+            <div class="flex items-center gap-2 bg-blue-700/50 p-2 rounded-lg w-fit">
+                <i class="ph ph-calendar-blank text-blue-200"></i>
+                <input type="date" id="date-selector" class="bg-transparent text-blue-50 text-sm font-medium outline-none cursor-pointer">
+            </div>
+        </header>
+
+        <!-- Form Input Tugas Baru -->
+        <div class="px-6 -mt-5 relative z-10">
+            <form id="todo-form" class="flex items-center bg-white rounded-lg shadow-md overflow-hidden border border-gray-100">
+                <input 
+                    type="text" 
+                    id="todo-input" 
+                    placeholder="Tambahkan tugas..." 
+                    class="flex-grow py-3 px-4 outline-none text-gray-700 placeholder-gray-400 w-1/2"
+                    autocomplete="off"
+                >
+                <div class="flex items-center border-l border-gray-100 bg-gray-50 h-12">
+                    <i class="ph ph-clock text-gray-400 ml-3"></i>
+                    <input 
+                        type="number" 
+                        id="todo-duration" 
+                        placeholder="Menit" 
+                        min="1"
+                        class="w-20 sm:w-24 h-full py-3 px-2 outline-none bg-transparent text-gray-700 placeholder-gray-400 text-sm"
+                    >
+                </div>
+                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white p-3 transition-colors flex items-center justify-center w-12 h-12 flex-shrink-0" aria-label="Tambahkan Tugas">
+                    <i class="ph ph-plus font-bold text-xl"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- Filter Status Tugas -->
+        <nav class="flex justify-between px-6 mt-6 border-b border-gray-100 pb-2 text-sm font-medium">
+            <button class="filter-btn text-blue-600 border-b-2 border-blue-600 pb-1" data-filter="all">Semua</button>
+            <button class="filter-btn text-gray-400 hover:text-gray-600 pb-1" data-filter="active">Aktif</button>
+            <button class="filter-btn text-gray-400 hover:text-gray-600 pb-1" data-filter="completed">Selesai</button>
+        </nav>
+
+        <!-- Daftar Tugas -->
+        <div class="flex-grow overflow-y-auto p-4 px-6">
+            <ul id="todo-list" class="space-y-3"></ul>
+            
+            <div id="empty-state" class="hidden flex-col items-center justify-center py-10 text-center opacity-70">
+                <i class="ph ph-list-checks text-5xl text-gray-300 mb-3"></i>
+                <p class="text-gray-500 text-sm">Tidak ada tugas pada tanggal ini.</p>
+            </div>
+        </div>
+
+        <!-- Footer Statistik -->
+        <footer class="bg-gray-50 border-t border-gray-100 p-4 px-6 flex justify-between items-center text-xs text-gray-500">
+            <span id="task-count">0 tugas tersisa</span>
+            <button id="clear-completed" class="hover:text-red-500 transition-colors hidden cursor-pointer">
+                Hapus yang Selesai
+            </button>
+        </footer>
+    </main>
+
+    <!-- Modal Export Laporan -->
+    <div id="report-modal" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 transform scale-95 transition-transform duration-300" id="report-modal-content">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-xl font-bold text-gray-800">Ekspor Laporan</h2>
+                <button id="btn-close-report" class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="ph ph-x text-xl font-bold"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Periode Laporan</label>
+                    <select id="report-period" class="w-full border border-gray-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+                        <option value="daily">Harian (Hari Ini)</option>
+                        <option value="weekly">Mingguan (Minggu Ini)</option>
+                        <option value="monthly">Bulanan (Bulan Ini)</option>
+                        <option value="yearly">Tahunan (Tahun Ini)</option>
+                        <option value="custom">Kustom (Pilih Tanggal)</option>
+                    </select>
+                </div>
+
+                <div id="custom-date-range" class="hidden space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Dari Tanggal</label>
+                        <input type="date" id="report-start" class="w-full border border-gray-300 rounded-md p-2 outline-none text-sm focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">Sampai Tanggal</label>
+                        <input type="date" id="report-end" class="w-full border border-gray-300 rounded-md p-2 outline-none text-sm focus:border-blue-500">
+                    </div>
+                </div>
+
+                <!-- Notifikasi UI untuk error/info dalam modal -->
+                <div id="report-alert" class="hidden text-sm p-3 rounded-lg bg-red-50 text-red-600 border border-red-100 text-center font-medium">
+                </div>
+
+                <div class="flex gap-2 mt-2">
+                    <button id="btn-export-csv" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
+                        <i class="ph ph-file-csv text-lg"></i>
+                        CSV
+                    </button>
+                    <button id="btn-export-pdf" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm">
+                        <i class="ph ph-file-pdf text-lg"></i>
+                        PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inisialisasi Elemen Utama
+            const todoForm = document.getElementById('todo-form');
+            const todoInput = document.getElementById('todo-input');
+            const todoDuration = document.getElementById('todo-duration'); 
+            const todoList = document.getElementById('todo-list');
+            const emptyState = document.getElementById('empty-state');
+            const taskCountDisplay = document.getElementById('task-count');
+            const clearCompletedBtn = document.getElementById('clear-completed');
+            const filterBtns = document.querySelectorAll('.filter-btn');
+            
+            // Elemen Tanggal & Navigasi
+            const dateSelector = document.getElementById('date-selector');
+            
+            // Elemen Modal Laporan
+            const reportModal = document.getElementById('report-modal');
+            const reportModalContent = document.getElementById('report-modal-content');
+            const btnOpenReport = document.getElementById('btn-open-report');
+            const btnCloseReport = document.getElementById('btn-close-report');
+            const reportPeriod = document.getElementById('report-period');
+            const customDateRange = document.getElementById('custom-date-range');
+            const reportStart = document.getElementById('report-start');
+            const reportEnd = document.getElementById('report-end');
+            const btnExportCSV = document.getElementById('btn-export-csv');
+            const btnExportPDF = document.getElementById('btn-export-pdf'); 
+            const reportAlert = document.getElementById('report-alert');
+
+            // --- FUNGSI HELPER TANGGAL ---
+            const getLocalYYYYMMDD = (dateObj) => {
+                const y = dateObj.getFullYear();
+                const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const d = String(dateObj.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
+
+            // Manajemen State Aplikasi
+            let currentFilter = 'all';
+            let currentDateStr = getLocalYYYYMMDD(new Date());
+            
+            // Set input date ke hari ini secara default
+            dateSelector.value = currentDateStr;
+
+            // Mengambil & Migrasi Data dari localStorage
+            let todos = JSON.parse(localStorage.getItem('todo_data')) || [];
+            
+            // Migrasi Data Lama (Backward Compatibility): 
+            let hasMigrations = false;
+            todos = todos.map(todo => {
+                if (!todo.date) {
+                    hasMigrations = true;
+                    const fallbackDate = todo.id ? new Date(todo.id) : new Date();
+                    todo.date = getLocalYYYYMMDD(fallbackDate);
+                }
+                if (todo.duration === undefined) {
+                    hasMigrations = true;
+                    todo.duration = "";
+                }
+                if (todo.timeSpent === undefined) {
+                    hasMigrations = true;
+                    todo.timeSpent = 0;
+                    todo.isRunning = false;
+                    todo.lastStartTime = null;
+                }
+                return todo;
+            });
+            if(hasMigrations) saveToLocalStorage();
+
+            // --- FUNGSI INTI APLIKASI ---
+
+            function saveToLocalStorage() {
+                localStorage.setItem('todo_data', JSON.stringify(todos));
+            }
+
+            // Fungsi utilitas format waktu untuk visualisasi timer
+            const formatTime = (totalSeconds) => {
+                const h = Math.floor(totalSeconds / 3600);
+                const m = Math.floor((totalSeconds % 3600) / 60);
+                const s = totalSeconds % 60;
+                if (h > 0) return `${h}j ${m}m ${s}d`;
+                if (m > 0) return `${m}m ${s}d`;
+                return `${s}d`;
+            };
+
+            function renderTodos() {
+                // Filter 1: Berdasarkan tanggal yang dipilih
+                let filteredTodos = todos.filter(todo => todo.date === currentDateStr);
+
+                // Filter 2: Berdasarkan status (Semua/Aktif/Selesai)
+                if (currentFilter === 'active') {
+                    filteredTodos = filteredTodos.filter(todo => !todo.completed);
+                } else if (currentFilter === 'completed') {
+                    filteredTodos = filteredTodos.filter(todo => todo.completed);
+                }
+
+                todoList.innerHTML = '';
+
+                if (filteredTodos.length === 0) {
+                    emptyState.classList.remove('hidden');
+                    emptyState.classList.add('flex');
+                } else {
+                    emptyState.classList.add('hidden');
+                    emptyState.classList.remove('flex');
+
+                    filteredTodos.forEach(todo => {
+                        const li = document.createElement('li');
+                        li.className = `task-item flex items-center justify-between p-3 rounded-lg border ${todo.completed ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200 shadow-sm'} group`;
+                        
+                        const currentSpent = todo.timeSpent + (todo.isRunning ? Math.floor((Date.now() - todo.lastStartTime) / 1000) : 0);
+                        const formattedSpent = formatTime(currentSpent);
+                        
+                        // Badge sekarang memiliki warna dinamis (oranye saat timer berjalan) dan menampilkan detik yang berjalan
+                        const durationBadge = `<span class="ml-0 sm:ml-2 mt-1 sm:mt-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium ${todo.isRunning ? 'bg-orange-50 text-orange-600 border-orange-200' : 'bg-blue-50 text-blue-600 border-blue-100'} border"><i class="ph ph-clock"></i> <span id="timer-display-${todo.id}">${formattedSpent}</span>${todo.duration ? ` / ${todo.duration} mnt` : ''}</span>`;
+
+                        li.innerHTML = `
+                            <div class="flex items-center gap-3 overflow-hidden cursor-pointer w-full pr-2" onclick="toggleTodo(${todo.id})">
+                                <button class="flex-shrink-0 w-5 h-5 rounded-full border border-gray-300 flex items-center justify-center transition-colors ${todo.completed ? 'bg-blue-500 border-blue-500' : 'hover:border-blue-400'}">
+                                    <i class="ph ph-check text-white text-xs ${todo.completed ? 'block' : 'hidden'}"></i>
+                                </button>
+                                <div class="flex flex-col sm:flex-row sm:items-center truncate w-full">
+                                    <span class="truncate text-sm select-none ${todo.completed ? 'text-gray-400 line-through' : 'text-gray-700'}">
+                                        ${escapeHTML(todo.text)}
+                                    </span>
+                                    ${durationBadge}
+                                </div>
+                            </div>
+                            <div class="flex items-center flex-shrink-0 gap-1 opacity-100">
+                                ${!todo.completed ? `
+                                <button onclick="event.stopPropagation(); toggleTimer(${todo.id})" class="text-gray-400 hover:text-orange-500 transition-colors p-1" aria-label="Mulai/Jeda Waktu">
+                                    <i class="ph ${todo.isRunning ? 'ph-pause-circle text-orange-500' : 'ph-play-circle text-blue-500'} text-xl"></i>
+                                </button>
+                                ` : ''}
+                                <button onclick="deleteTodo(${todo.id})" class="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all p-1" aria-label="Hapus Tugas">
+                                    <i class="ph ph-trash text-lg"></i>
+                                </button>
+                            </div>
+                        `;
+                        todoList.appendChild(li);
+                    });
+                }
+
+                updateFooterData();
+            }
+
+            function updateFooterData() {
+                // Dihitung berdasarkan data HARI INI yang sedang aktif
+                const currentDayTodos = todos.filter(todo => todo.date === currentDateStr);
+                const activeCount = currentDayTodos.filter(todo => !todo.completed).length;
+                const completedCount = currentDayTodos.length - activeCount;
+
+                taskCountDisplay.textContent = `${activeCount} tugas tersisa`;
+
+                if (completedCount > 0) {
+                    clearCompletedBtn.classList.remove('hidden');
+                } else {
+                    clearCompletedBtn.classList.add('hidden');
+                }
+            }
+
+            const escapeHTML = (str) => {
+                const div = document.createElement('div');
+                div.appendChild(document.createTextNode(str));
+                return div.innerHTML;
+            };
+
+            // Engine Global untuk memperbarui render tulisan timer setiap detik
+            setInterval(() => {
+                todos.forEach(todo => {
+                    if (todo.isRunning) {
+                        const display = document.getElementById(`timer-display-${todo.id}`);
+                        if (display) {
+                            const currentSpent = todo.timeSpent + Math.floor((Date.now() - todo.lastStartTime) / 1000);
+                            display.textContent = formatTime(currentSpent);
+                        }
+                    }
+                });
+            }, 1000);
+
+            // --- EVENT LISTENERS UTAMA ---
+
+            // Perubahan Tanggal melalui Header
+            dateSelector.addEventListener('change', (e) => {
+                if(e.target.value) {
+                    currentDateStr = e.target.value;
+                    renderTodos();
+                } else {
+                    // Jika dikosongkan (di-cancel), kembalikan ke tanggal sebelumnya
+                    e.target.value = currentDateStr;
+                }
+            });
+
+            // Form Submit (Tugas Baru)
+            todoForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const text = todoInput.value.trim();
+                const durationVal = todoDuration.value.trim();
+                
+                if (text) {
+                    const newTodo = {
+                        id: Date.now(),
+                        text: text,
+                        duration: durationVal,
+                        completed: false,
+                        date: currentDateStr,
+                        timeSpent: 0,
+                        isRunning: false,
+                        lastStartTime: null 
+                    };
+                    
+                    todos.unshift(newTodo); 
+                    saveToLocalStorage();
+                    todoInput.value = '';
+                    todoDuration.value = ''; // Mengosongkan input durasi
+                    renderTodos();
+                }
+            });
+
+            // Action: Toggle Status
+            window.toggleTodo = (id) => {
+                todos = todos.map(todo => {
+                    if (todo.id === id) {
+                        const willComplete = !todo.completed;
+                        let updated = { ...todo, completed: willComplete };
+                        
+                        // Jika menceklis selesai pada tugas yang sedang aktif jalan, otomatis matikan timernya
+                        if (willComplete && todo.isRunning) {
+                            updated.isRunning = false;
+                            updated.timeSpent += Math.floor((Date.now() - todo.lastStartTime) / 1000);
+                        }
+                        return updated;
+                    }
+                    return todo;
+                });
+                saveToLocalStorage();
+                renderTodos();
+            };
+
+            // Action: Toggle Timer (Mulai/Jeda Pengerjaan)
+            window.toggleTimer = (id) => {
+                todos = todos.map(todo => {
+                    if (todo.id === id) {
+                        if (todo.isRunning) {
+                            // Jeda (Stop Timer)
+                            const sessionSeconds = Math.floor((Date.now() - todo.lastStartTime) / 1000);
+                            return { ...todo, isRunning: false, timeSpent: todo.timeSpent + sessionSeconds };
+                        } else {
+                            // Mulai (Start Timer)
+                            return { ...todo, isRunning: true, lastStartTime: Date.now() };
+                        }
+                    }
+                    return todo;
+                });
+                saveToLocalStorage();
+                renderTodos();
+            };
+
+            // Action: Delete Task
+            window.deleteTodo = (id) => {
+                todos = todos.filter(todo => todo.id !== id);
+                saveToLocalStorage();
+                renderTodos();
+            };
+
+            // Action: Clear Completed (Hanya untuk tanggal yang sedang aktif)
+            clearCompletedBtn.addEventListener('click', () => {
+                todos = todos.filter(todo => {
+                    // Simpan jika beda tanggal, atau jika di tanggal yang sama tapi belum selesai
+                    return todo.date !== currentDateStr || !todo.completed;
+                });
+                saveToLocalStorage();
+                renderTodos();
+            });
+
+            // Navigasi Filter Status
+            filterBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    filterBtns.forEach(b => {
+                        b.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
+                        b.classList.add('text-gray-400');
+                    });
+                    
+                    btn.classList.remove('text-gray-400');
+                    btn.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
+                    
+                    currentFilter = btn.getAttribute('data-filter');
+                    renderTodos();
+                });
+            });
+
+            
+            // --- LOGIKA MODAL LAPORAN ---
+            
+            const openModal = () => {
+                reportModal.classList.remove('hidden');
+                // Timeout singkat untuk memicu transisi CSS
+                setTimeout(() => {
+                    reportModal.classList.remove('opacity-0');
+                    reportModalContent.classList.remove('scale-95');
+                }, 10);
+                
+                // Reset alert dan field
+                reportAlert.classList.add('hidden');
+                reportPeriod.value = 'daily';
+                customDateRange.classList.add('hidden');
+                
+                // Set default custom date hari ini
+                const today = getLocalYYYYMMDD(new Date());
+                reportStart.value = today;
+                reportEnd.value = today;
+            };
+
+            const closeModal = () => {
+                reportModal.classList.add('opacity-0');
+                reportModalContent.classList.add('scale-95');
+                setTimeout(() => {
+                    reportModal.classList.add('hidden');
+                }, 300); // Sesuaikan dengan durasi transisi
+            };
+
+            btnOpenReport.addEventListener('click', openModal);
+            btnCloseReport.addEventListener('click', closeModal);
+            
+            // Tutup modal jika area luar (backdrop) diklik
+            reportModal.addEventListener('click', (e) => {
+                if (e.target === reportModal) closeModal();
+            });
+
+            // Tampilkan/Sembunyikan input rentang tanggal jika kustom dipilih
+            reportPeriod.addEventListener('change', (e) => {
+                if (e.target.value === 'custom') {
+                    customDateRange.classList.remove('hidden');
+                } else {
+                    customDateRange.classList.add('hidden');
+                }
+                reportAlert.classList.add('hidden'); // Reset pesan error
+            });
+
+            const showReportAlert = (msg) => {
+                reportAlert.textContent = msg;
+                reportAlert.classList.remove('hidden');
+            };
+
+            const getReportData = () => {
+                const period = reportPeriod.value;
+                const todayObj = new Date();
+                let startStr = '';
+                let endStr = '';
+
+                if (period === 'daily') {
+                    startStr = getLocalYYYYMMDD(todayObj);
+                    endStr = startStr;
+                } else if (period === 'weekly') {
+                    const day = todayObj.getDay() || 7; 
+                    if(day !== 1) todayObj.setHours(-24 * (day - 1));
+                    startStr = getLocalYYYYMMDD(todayObj);
+                    const endWeekObj = new Date(todayObj);
+                    endWeekObj.setDate(todayObj.getDate() + 6);
+                    endStr = getLocalYYYYMMDD(endWeekObj);
+                } else if (period === 'monthly') {
+                    const y = todayObj.getFullYear();
+                    const m = String(todayObj.getMonth() + 1).padStart(2, '0');
+                    startStr = `${y}-${m}-01`;
+                    const lastDay = new Date(y, todayObj.getMonth() + 1, 0).getDate();
+                    endStr = `${y}-${m}-${lastDay}`;
+                } else if (period === 'yearly') {
+                    const y = todayObj.getFullYear();
+                    startStr = `${y}-01-01`;
+                    endStr = `${y}-12-31`;
+                } else if (period === 'custom') {
+                    startStr = reportStart.value;
+                    endStr = reportEnd.value;
+                    if (!startStr || !endStr) {
+                        showReportAlert('Mohon lengkapi tanggal mulai dan selesai.');
+                        return null;
+                    }
+                    if (startStr > endStr) {
+                        showReportAlert('Tanggal mulai tidak boleh melebihi tanggal selesai.');
+                        return null;
+                    }
+                }
+
+                const filteredData = todos.filter(t => t.date >= startStr && t.date <= endStr)
+                                          .sort((a, b) => a.date.localeCompare(b.date));
+                                          
+                if (filteredData.length === 0) {
+                    showReportAlert('Tidak ada tugas pada rentang waktu ini.');
+                    return null;
+                }
+
+                return { filteredData, startStr, endStr };
+            };
+
+            btnExportCSV.addEventListener('click', () => {
+                const report = getReportData();
+                if (!report) return;
+
+                // Kalkulasi Keseluruhan
+                const totalTasks = report.filteredData.length;
+                const completedTasks = report.filteredData.filter(t => t.completed).length;
+                const overallPerc = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+                // Pengelompokan Data Harian
+                const dailyStats = {};
+                report.filteredData.forEach(t => {
+                    if (!dailyStats[t.date]) dailyStats[t.date] = { total: 0, completed: 0 };
+                    dailyStats[t.date].total++;
+                    if (t.completed) dailyStats[t.date].completed++;
+                });
+
+                let csvContent = "\uFEFF"; 
+                
+                // 1. Menulis Ringkasan Keseluruhan
+                csvContent += "RINGKASAN KESELURUHAN\n";
+                csvContent += `Total Tugas,${totalTasks}\n`;
+                csvContent += `Tugas Selesai,${completedTasks}\n`;
+                csvContent += `Tingkat Penyelesaian (Akumulatif),${overallPerc}%\n\n`;
+
+                // 2. Menulis Ringkasan Harian
+                csvContent += "RINGKASAN HARIAN\n";
+                csvContent += "Tanggal,Total Tugas,Selesai,Persentase Penyelesaian\n";
+                Object.keys(dailyStats).sort().forEach(date => {
+                    const stat = dailyStats[date];
+                    const perc = stat.total > 0 ? Math.round((stat.completed / stat.total) * 100) : 0;
+                    csvContent += `${date},${stat.total},${stat.completed},${perc}%\n`;
+                });
+                csvContent += "\n";
+
+                // 3. Menulis Detail Tabel Utama
+                csvContent += "DETAIL TUGAS\n";
+                csvContent += "Tanggal,Tugas,Target Durasi (Menit),Waktu Terpakai (Menit),Status Penyelesaian\n";
+
+                report.filteredData.forEach(row => {
+                    let safeText = row.text.replace(/"/g, '""'); 
+                    let status = row.completed ? "Selesai" : "Aktif/Belum Selesai";
+                    let dur = row.duration ? row.duration : "-";
+                    
+                    let totalSecs = row.timeSpent + (row.isRunning ? Math.floor((Date.now() - row.lastStartTime) / 1000) : 0);
+                    let spentMins = Math.round(totalSecs / 60);
+                    
+                    csvContent += `${row.date},"${safeText}",${dur},${spentMins},${status}\n`;
+                });
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.setAttribute("href", url);
+                link.setAttribute("download", `Laporan_Tugas_${report.startStr}_sd_${report.endStr}.csv`);
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                closeModal(); 
+            });
+
+            btnExportPDF.addEventListener('click', () => {
+                const report = getReportData();
+                if (!report) return;
+
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                // Kalkulasi Keseluruhan
+                const totalTasks = report.filteredData.length;
+                const completedTasks = report.filteredData.filter(t => t.completed).length;
+                const overallPerc = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+                let totalTargetDuration = 0;
+                let totalSpentSeconds = 0;
+                
+                // Kalkulasi Harian
+                const dailyStats = {};
+
+                report.filteredData.forEach(t => {
+                    // Akumulasi Waktu
+                    if (t.duration && !isNaN(t.duration)) {
+                        totalTargetDuration += parseInt(t.duration);
+                    }
+                    totalSpentSeconds += t.timeSpent + (t.isRunning ? Math.floor((Date.now() - t.lastStartTime) / 1000) : 0);
+
+                    // Akumulasi Harian
+                    if (!dailyStats[t.date]) dailyStats[t.date] = { total: 0, completed: 0 };
+                    dailyStats[t.date].total++;
+                    if (t.completed) dailyStats[t.date].completed++;
+                });
+
+                const totalSpentMins = Math.round(totalSpentSeconds / 60);
+
+                doc.setFontSize(16);
+                doc.text("Laporan Manajemen Tugas", 14, 20);
+                
+                doc.setFontSize(10);
+                doc.setTextColor(100);
+                doc.text(`Periode: ${report.startStr} s.d. ${report.endStr}`, 14, 28);
+                // Injeksi teks tingkat penyelesaian keseluruhan
+                doc.text(`Total Tugas: ${totalTasks}  |  Selesai: ${completedTasks}  |  Tingkat Penyelesaian: ${overallPerc}%`, 14, 34);
+                doc.text(`Total Target Durasi: ${totalTargetDuration} Menit  |  Waktu Terpakai: ${totalSpentMins} Menit`, 14, 40);
+
+                doc.setFontSize(11);
+                doc.setTextColor(40);
+                doc.text("Detail Daftar Tugas:", 14, 50);
+
+                const tableColumn = ["Tanggal", "Tugas", "Target (Mnt)", "Terpakai (Mnt)", "Status"];
+                const tableRows = report.filteredData.map(row => {
+                    let totalSecs = row.timeSpent + (row.isRunning ? Math.floor((Date.now() - row.lastStartTime) / 1000) : 0);
+                    let spentMins = Math.round(totalSecs / 60);
+                    
+                    return [
+                        row.date,
+                        row.text,
+                        row.duration ? row.duration : "-",
+                        spentMins.toString(),
+                        row.completed ? "Selesai" : "Aktif"
+                    ];
+                });
+
+                doc.autoTable({
+                    startY: 53,
+                    head: [tableColumn],
+                    body: tableRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [37, 99, 235] }, 
+                    styles: { fontSize: 9 }
+                });
+
+                // Menentukan posisi Y terakhir dari tabel pertama agar tabel kedua tidak menimpa
+                let finalY = doc.lastAutoTable.finalY || 53;
+                
+                // Mencegah tabel terpotong jika posisi Y sudah terlalu bawah di halaman
+                if (finalY > 250) {
+                    doc.addPage();
+                    finalY = 14;
+                } else {
+                    finalY += 10;
+                }
+
+                doc.setFontSize(11);
+                doc.setTextColor(40);
+                doc.text("Statistik Penyelesaian Harian:", 14, finalY);
+
+                const dailyColumn = ["Tanggal", "Total Tugas", "Selesai", "Persentase Penyelesaian"];
+                const dailyRows = Object.keys(dailyStats).sort().map(date => {
+                    const stat = dailyStats[date];
+                    const perc = stat.total > 0 ? Math.round((stat.completed / stat.total) * 100) : 0;
+                    return [
+                        date,
+                        stat.total.toString(),
+                        stat.completed.toString(),
+                        `${perc}%`
+                    ];
+                });
+
+                doc.autoTable({
+                    startY: finalY + 3,
+                    head: [dailyColumn],
+                    body: dailyRows,
+                    theme: 'grid',
+                    // Memberi warna header agak abu-abu agar berbeda dari tabel utama
+                    headStyles: { fillColor: [71, 85, 105] }, 
+                    styles: { fontSize: 9 }
+                });
+
+                doc.save(`Laporan_Tugas_${report.startStr}_sd_${report.endStr}.pdf`);
+                closeModal();
+            });
+
+            // Eksekusi pertama
+            renderTodos();
+        });
+    </script>
+</body>
+</html>
